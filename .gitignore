@@ -1,0 +1,8 @@
+/chipyard/
+/.idea/
+/*.ok
+/*.log
+*.rpt
+*.png
+*.csv
+*.txt

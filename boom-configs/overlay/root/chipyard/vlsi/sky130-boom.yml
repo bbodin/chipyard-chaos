@@ -1,0 +1,126 @@
+# Tool options. Replace with your tool plugin of choice.
+vlsi.core.build_system: make
+# Synthesis: Yosys
+vlsi.core.synthesis_tool: "hammer.synthesis.yosys"
+# Place-and-Route: OpenROAD
+vlsi.core.par_tool: "hammer.par.openroad"
+# DRC: KLayout or Magic (comment other one out)
+vlsi.core.drc_tool: "hammer.drc.klayout"
+# vlsi.core.drc_tool: "hammer.drc.magic"
+# LVS: Netgen
+vlsi.core.lvs_tool: "hammer.lvs.netgen"
+
+# Explicit tool binaries for the conda-installed tools
+synthesis.yosys.yosys_bin: "/root/.conda-yosys/bin/yosys"
+par.openroad.openroad_bin: "/root/.conda-openroad/bin/openroad"
+par.openroad.klayout_bin: "/root/.conda-klayout/bin/klayout"
+drc.klayout.klayout_bin: "/root/.conda-klayout/bin/klayout"
+drc.magic.magic_bin: "/root/.conda-signoff/bin/magic"
+lvs.netgen.netgen_bin: "/root/.conda-signoff/bin/netgen"
+
+# Technology Setup
+# Technology used is Sky130
+vlsi.core.technology: "hammer.technology.sky130"
+
+vlsi.core.max_threads: 12
+
+# Technology paths
+technology.sky130:
+  sky130A: "/root/.conda-sky130/share/pdk/sky130A"
+  sram22_sky130_macros: "/root/sram22_sky130_macros"
+
+  # this key is OPTIONAL, no NDA files will be used if it does not point to a valid path
+  sky130_nda: "/path/to/skywater-src-nda"
+
+# General Hammer Inputs
+
+# Hammer will auto-generate a CPF for simple power designs; see hammer/src/hammer-vlsi/defaults.yml for more info
+vlsi.inputs.power_spec_mode: "auto"
+vlsi.inputs.power_spec_type: "cpf"
+
+# Flow parameters that yield a routable design with reasonable timing
+par.openroad:
+  timing_driven: true  # improve QoR/routability
+  # Must be none for the first successful run; switch to latest_run after par succeeds.
+  create_archive_mode: none
+
+  write_reports: true
+
+  floorplan_mode: generate
+
+  macro_placement.halo: [50, 50]
+
+  global_placement.timing_driven: true
+  global_placement.routability_driven: true
+
+  global_placement.placement_padding: 8
+  detailed_placement.placement_padding: 6
+  clock_tree.placement_padding: 2
+  clock_tree_resize.placement_padding: 0
+
+  clock_tree_resize.setup_margin: 0.0
+  clock_tree_resize.hold_margin: 0.20
+  global_route_resize.hold_margin: 0.60
+  clock_tree_resize.hold_max_buffer_percent: 80
+
+  # Use less aggressive derating to improve routability
+  global_placement.routing_adjustment: 0.95
+  global_route.routing_adjustment: 1.0
+  global_route_resize.routing_adjustment: 0.9
+
+# DRC/LVS configuration
+drc.magic.generate_only: true
+lvs.netgen.generate_only: true
+
+# Boom core uses "clock"
+# Large period to reduce timing pressure for faster P&R.
+vlsi.inputs.clocks: [
+  {name: "clock", period: "200ns", uncertainty: "5ns"}
+]
+
+# Power Straps
+par.power_straps_mode: generate
+par.generate_power_straps_method: by_tracks
+par.blockage_spacing: 2.0
+par.blockage_spacing_top_layer: met3
+par.generate_power_straps_options:
+  by_tracks:
+    strap_layers:
+      - met4
+      - met5
+    pin_layers:
+      - met5
+    blockage_spacing_met2: 4.0
+    blockage_spacing_met4: 2.0
+    track_width: 2
+    track_width_met5: 1
+    track_spacing: 5
+    track_start: 10
+    track_start_met5: 1
+    power_utilization: 0.02
+    power_utilization_met4: 0.02
+    power_utilization_met5: 0.02
+
+# Pin placement constraints
+vlsi.inputs.pin_mode: generated
+vlsi.inputs.pin.generate_mode: semi_auto
+vlsi.inputs.pin.assignments: [
+  {pins: "*", layers: ["met2", "met4"], side: "bottom"}
+]
+
+# SRAM Compiler compiler options
+vlsi.core.sram_generator_tool: "hammer.technology.sky130.sram_compiler"
+
+# Placement Constraints
+vlsi.inputs.placement_constraints:
+  - path: "BoomCore"
+    type: toplevel
+    x: 0
+    y: 0
+    width: 4200.0
+    height: 2800.0
+    margins:
+      left: 10.12
+      right: 10.12
+      top: 10.88
+      bottom: 10.88
