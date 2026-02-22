@@ -1,4 +1,4 @@
-.PHONY: docker-start docker-cmd docker-kill docker-build clean
+.PHONY: docker-start docker-cmd docker-kill docker-build docker-status clean
 
 docker-build: build$(OUT_SUFFIX).log
 
@@ -31,3 +31,12 @@ docker-cmd:
 
 docker-kill:
 	@docker ps -q | xargs -r docker rm -f
+
+docker-status:
+	@cid=$$(docker ps -q --filter "name=^/$(DOCKER_CONTAINER)$$" | head -n 1); \
+	if [ -z "$$cid" ]; then cid=$$(docker ps -q --filter ancestor=$(DOCKER_IMAGE) | head -n 1); fi; \
+	if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 1; fi; \
+	echo "--- Container Resources ---"; \
+	docker stats --no-stream $$cid; \
+	echo "--- Disk Space ---"; \
+	docker exec $$cid df -h /
