@@ -1,4 +1,4 @@
-.PHONY: docker-start docker-stop docker-cmd docker-kill docker-build docker-status clean
+.PHONY: docker-start docker-stop docker-reset docker-cmd docker-kill docker-build docker-status clean
 
 docker-build: build$(OUT_SUFFIX).log
 
@@ -25,6 +25,11 @@ docker-stop:
 	if [ -z "$$cid" ]; then cid=$$(docker ps -q --filter ancestor=$(DOCKER_IMAGE) | head -n 1); fi; \
 	if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 1; fi; \
 	docker stop $$cid >/dev/null
+
+docker-reset:
+	@cid=$$(docker ps -aq --filter "name=^/$(DOCKER_CONTAINER)$$" | head -n 1); \
+	if [ -n "$$cid" ]; then docker rm -f $$cid >/dev/null; fi; \
+	$(MAKE) docker-start
 
 docker-cmd:
 	@set -e; \
