@@ -339,9 +339,6 @@ def main() -> int:
         print(f"Template not found: {template_path}", file=sys.stderr)
         return 2
 
-    if args.space and args.ranges:
-        print("Use only one of --space or --ranges", file=sys.stderr)
-        return 2
     space_path = args.space
     param_space, param_order = load_space(Path(space_path))
 
