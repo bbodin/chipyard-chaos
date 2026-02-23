@@ -1,4 +1,4 @@
-.PHONY: docker-start docker-cmd docker-kill docker-build clean
+.PHONY: docker-start docker-cmd docker-kill docker-build clean docker-status
 
 docker-build: build$(OUT_SUFFIX).log
 
@@ -31,3 +31,45 @@ docker-cmd:
 
 docker-kill:
 	@docker ps -q | xargs -r docker rm -f
+
+docker-status:
+	@docker info >/dev/null 2>&1 || { echo "Docker daemon: NOT RUNNING"; exit 1; }
+
+	@printf "\n==============================\n"
+	@printf "      DOCKER STATUS REPORT\n"
+	@printf "==============================\n\n"
+
+	@# --- Docker Root & Host Disk ---
+	@root_dir=$$(docker info -f '{{.DockerRootDir}}'); \
+	printf "Docker Root Dir : %s\n" "$$root_dir"; \
+	printf "Host FS Usage   :\n"; \
+	df -h "$$root_dir" | awk 'NR==1 || NR==2'; \
+	printf "\n"
+
+	@# --- Docker Disk Usage ---
+	@printf "Docker Disk Usage:\n"; \
+	docker system df; \
+	printf "\n"
+
+	@# --- Running Containers ---
+	@printf "Running Containers:\n"; \
+	docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"; \
+	printf "\n"
+
+	@# --- Resource Usage ---
+	@printf "Live Resource Usage:\n"; \
+	docker stats --no-stream \
+		--format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"; \
+	printf "\n"
+
+	@# --- Container Sizes (Human Readable) ---
+	@printf "Container Sizes:\n"; \
+	docker ps -a --format "{{.Names}}" | while read c; do \
+		rw=$$(docker inspect --size $$c --format '{{.SizeRw}}'); \
+		root=$$(docker inspect --size $$c --format '{{.SizeRootFs}}'); \
+		rw_h=$$(numfmt --to=iec --suffix=B $$rw 2>/dev/null || echo $$rw); \
+		root_h=$$(numfmt --to=iec --suffix=B $$root 2>/dev/null || echo $$root); \
+		printf "  %-25s RW: %-8s  Total: %s\n" $$c $$rw_h $$root_h; \
+	done
+
+	@printf "\n==============================\n\n"
