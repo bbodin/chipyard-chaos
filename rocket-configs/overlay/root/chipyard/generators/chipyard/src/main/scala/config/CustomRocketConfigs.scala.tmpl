@@ -5,46 +5,46 @@ import org.chipsalliance.cde.config.{Config, Parameters}
 // Edit these to customize Rocket cache geometry, line size, and core composition.
 object CustomRocketParams {
   // Core composition
-  val useTinyCore: Boolean = CustomRocketParams.useTinyCore
-  val numCores: Int = 1               // used when useTinyCore = false
-  val useRV32: Boolean = false
+  val useTinyCore: Boolean = {{useTinyCore}}
+  val numCores: Int = {{numCores}}               // used when useTinyCore = false
+  val useRV32: Boolean = {{useRV32}}
 
   // Cache line size (bytes)
-  val cacheBlockBytes: Int = 32
+  val cacheBlockBytes: Int = {{cacheBlockBytes}}
 
   // L1 cache geometry
-  val l1ICacheSets: Int = 32
-  val l1ICacheWays: Int = 2
-  val l1DCacheSets: Int = 32
-  val l1DCacheWays: Int = 1
+  val l1ICacheSets: Int = {{l1ICacheSets}}
+  val l1ICacheWays: Int = {{l1ICacheWays}}
+  val l1DCacheSets: Int = {{l1DCacheSets}}
+  val l1DCacheWays: Int = {{l1DCacheWays}}
 
   // L1 D$ nonblocking (set to 0 to disable). Tiny cores use a scratchpad-style cache,
   // so keep this disabled unless useTinyCore = false.
-  val l1DCacheMSHRs: Int = 0
+  val l1DCacheMSHRs: Int = {{l1DCacheMSHRs}}
 
   // Core micro-architecture knobs
-  val l2TLBEntries: Int = 4
-  val nPerfCounters: Int = 2
-  val nPMPs: Int = 0
-  val enableTilePrefetchers: Boolean = true
+  val l2TLBEntries: Int = {{l2TLBEntries}}
+  val nPerfCounters: Int = {{nPerfCounters}}
+  val nPMPs: Int = {{nPMPs}}
+  val enableTilePrefetchers: Boolean = {{enableTilePrefetchers}}
 
   // L2 configuration
-  val enableL2: Boolean = 
+  val enableL2: Boolean = {{enableL2}}
   // L2 cache tuning (inclusive LLC)
-  val l2CapacityKB: Int = 512
-  val l2Ways: Int = 8
-  val l2OuterLatencyCycles: Int = 20
-  val l2SubBankingFactor: Int = 2
-  val l2HintsSkipProbe: Boolean = false
-  val l2BankedControl: Boolean = false
-  val l2CtrlAddr: Option[Int] = Some(sifive.blocks.inclusivecache.InclusiveCacheParameters.L2ControlAddress)
-  val l2WriteBytes: Int = 16
-  val l2Banks: Int = 1
+  val l2CapacityKB: Int = {{l2CapacityKB}}
+  val l2Ways: Int = {{l2Ways}}
+  val l2OuterLatencyCycles: Int = {{l2OuterLatencyCycles}}
+  val l2SubBankingFactor: Int = {{l2SubBankingFactor}}
+  val l2HintsSkipProbe: Boolean = {{l2HintsSkipProbe}}
+  val l2BankedControl: Boolean = {{l2BankedControl}}
+  val l2CtrlAddr: Option[Int] = {{l2CtrlAddr}}
+  val l2WriteBytes: Int = {{l2WriteBytes}}
+  val l2Banks: Int = {{l2Banks}}
 
   // System topology
-  val useIncoherentBus: Boolean = CustomRocketParams.useIncoherentBus
-  val enableMemPort: Boolean = 
-  val disableScratchpads: Boolean = true
+  val useIncoherentBus: Boolean = {{useIncoherentBus}}
+  val enableMemPort: Boolean = {{enableMemPort}}
+  val disableScratchpads: Boolean = {{disableScratchpads}}
 }
 
 private object CustomRocketConfigFragments {

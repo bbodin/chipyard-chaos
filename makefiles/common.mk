@@ -1,33 +1,49 @@
 SHELL := /bin/bash
 .DELETE_ON_ERROR:
 
-TARGET ?= rocket
-OUT_SUFFIX =
-
 DOCKER_OVERLAYS ?= rocket-configs/overlay boom-configs/overlay
 DOCKER_DEPS = $(shell find $(DOCKER_OVERLAYS) -type f 2>/dev/null)
-
 DOCKERFILE ?= Dockerfile
-
-CHIPYARD_CONFIG ?= CustomRocketConfig
-CHIPYARD_TOP ?= Rocket
-VLSI_CONF ?= sky130-rocket.yml
-
-VLSI_OBJ_DIR ?= build-sky130-openroad
 CHIPYARD_VLSI_DIR ?= /root/chipyard/vlsi
-CHIPYARD_VLSI_OBJ ?= $(CHIPYARD_VLSI_DIR)/$(VLSI_OBJ_DIR)/chipyard.harness.TestHarness.$(CHIPYARD_CONFIG)-ChipTop
 
 DOCKER_IMAGE ?= chipyard-proto
 DOCKER_CONTAINER ?= chipyard-proto-runner
 DOCKER_START_DEPS ?=
 
+TARGET ?= rocket
+
 ifeq ($(TARGET),boom)
-CHIPYARD_CONFIG = SmallBoomV3Config
-CHIPYARD_TOP = BoomCore
-VLSI_OBJ_DIR = build-sky130-openroad-boom
-VLSI_CONF = sky130-boom.yml
-OUT_SUFFIX = .boom
+	CHIPYARD_CONFIG = SmallBoomV3Config
+	CHIPYARD_TOP = BoomCore
+	VLSI_OBJ_DIR = build-sky130-openroad-boom
+	VLSI_CONF = sky130-boom.yml
+	OUT_SUFFIX = .boom
+else ifeq ($(TARGET),rocket)
+	CHIPYARD_CONFIG ?= TinyRocketConfig
+	CHIPYARD_TOP ?= Rocket
+	VLSI_CONF ?= sky130-rocket.yml
+	VLSI_OBJ_DIR = build-sky130-openroad-rocket
+	OUT_SUFFIX = .rocket
+else ifeq ($(TARGET),customrocket)
+	CHIPYARD_CONFIG ?= CustomRocketConfig
+	CHIPYARD_TOP ?= Rocket
+	VLSI_CONF ?= sky130-rocket.yml
+	VLSI_OBJ_DIR = build-sky130-openroad-customrocket
+	OUT_SUFFIX = .customrocket
+else ifeq ($(TARGET),customboom)
+	CHIPYARD_CONFIG ?= CustomBoomConfig
+	CHIPYARD_TOP ?= BoomCore
+	VLSI_CONF ?= sky130-boom.yml
+	VLSI_OBJ_DIR = build-sky130-openroad-customboom
+	OUT_SUFFIX = .customboom
+else
+$(error Unsupported TARGET: $(TARGET))
 endif
+
+
+
+
+CHIPYARD_VLSI_OBJ ?= $(CHIPYARD_VLSI_DIR)/$(VLSI_OBJ_DIR)/chipyard.harness.TestHarness.$(CHIPYARD_CONFIG)-ChipTop
 
 LOG_PREFIX ?=
 LOG_PREFIX_BASENAMES = build test plot_violations benchmark syn par power syn_power verilog
