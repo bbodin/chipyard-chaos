@@ -1,0 +1,33 @@
+{
+  "params": {
+    "useTinyCore": [false, true],
+    "numCores": [1, 2, 4],
+    "useRV32": [true, false],
+    "cacheBlockBytes": [32, 64, 128],
+    "l1ICacheSets": [16, 32, 64],
+    "l1ICacheWays": [1, 2],
+    "l1DCacheSets": [32, 64, 128],
+    "l1DCacheWays": [1, 2, 4],
+    "l1DCacheMSHRs": [0, 2],
+    "l2TLBEntries": [0, 4],
+    "nPerfCounters": [0, 2],
+    "nPMPs": [0, 8],
+    "enableTilePrefetchers": [false, true],
+    "enableL2": [true, false],
+    "l2CapacityKB": [256, 512, 1024],
+    "l2Ways": [4, 8, 16],
+    "l2OuterLatencyCycles": [20, 40],
+    "l2SubBankingFactor": [2, 4],
+    "l2HintsSkipProbe": [false, true],
+    "l2BankedControl": [false, true],
+    "l2CtrlAddr": [
+      "raw:Some(sifive.blocks.inclusivecache.InclusiveCacheParameters.L2ControlAddress)",
+      "raw:None"
+    ],
+    "l2WriteBytes": [8, 16],
+    "l2Banks": [1, 2],
+    "useIncoherentBus": [false, true],
+    "enableMemPort": [true, false],
+    "disableScratchpads": [true, false]
+  }
+}

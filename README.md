@@ -64,7 +64,7 @@ make custom_vlog
 
 Use CUSTOM_VLOG in vlsi flow
 ```bash
-CUSTOM_VLOG="$(cat custom_vlog.txt)" make syn
+CUSTOM_VLOG="$(cat custom_vlog.rocket.txt)" make syn
 CUSTOM_VLOG="$(cat custom_vlog.boom.txt)" make TARGET=boom syn
 ```
 
@@ -72,13 +72,13 @@ CUSTOM_VLOG="$(cat custom_vlog.boom.txt)" make TARGET=boom syn
 
 Rocket outputs (default)
 ```text
-build.log
-verilog.log
-custom_vlog.txt
-syn.log
-par.log
-power.log
-power.rpt
+build.rocket.log
+verilog.rocket.log
+custom_vlog.rocket.txt
+syn.rocket.log
+par.rocket.log
+power.rocket.log
+power.rocket.rpt
 ```
 
 Boom outputs (TARGET=boom)
@@ -91,6 +91,14 @@ par.boom.log
 power.boom.log
 power.boom.rpt
 ```
+
+## Scripts
+
+Parameter exploration (random search):
+```bash
+scripts/param_explore.py --space rocket-configs/overlay/root/chipyard/generators/chipyard/src/main/scala/config/param_rocket.json
+```
+
 
 
 ## Clean

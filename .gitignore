@@ -6,3 +6,5 @@
 *.png
 *.csv
 *.txt
+/param_explore_logs/
+__pycache__

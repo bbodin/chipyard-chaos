@@ -5,40 +5,62 @@ import org.chipsalliance.cde.config.{Config, Parameters}
 // Edit these to customize Rocket cache geometry, line size, and core composition.
 object CustomRocketParams {
   // Core composition
-  val useTinyCore: Boolean = true
+  val useTinyCore: Boolean = CustomRocketParams.useTinyCore
   val numCores: Int = 1               // used when useTinyCore = false
-  val useRV32: Boolean = true
+  val useRV32: Boolean = false
 
   // Cache line size (bytes)
-  val cacheBlockBytes: Int = 64
+  val cacheBlockBytes: Int = 32
 
   // L1 cache geometry
   val l1ICacheSets: Int = 32
-  val l1ICacheWays: Int = 1
-  val l1DCacheSets: Int = 64
-  val l1DCacheWays: Int = 4
+  val l1ICacheWays: Int = 2
+  val l1DCacheSets: Int = 32
+  val l1DCacheWays: Int = 1
 
   // L1 D$ nonblocking (set to 0 to disable). Tiny cores use a scratchpad-style cache,
   // so keep this disabled unless useTinyCore = false.
   val l1DCacheMSHRs: Int = 0
 
   // Core micro-architecture knobs
-  val l2TLBEntries: Int = 0
-  val nPerfCounters: Int = 0
+  val l2TLBEntries: Int = 4
+  val nPerfCounters: Int = 2
   val nPMPs: Int = 0
-  val enableTilePrefetchers: Boolean = false
+  val enableTilePrefetchers: Boolean = true
 
   // L2 configuration
-  val enableL2: Boolean = false
+  val enableL2: Boolean = 
+  // L2 cache tuning (inclusive LLC)
+  val l2CapacityKB: Int = 512
+  val l2Ways: Int = 8
+  val l2OuterLatencyCycles: Int = 20
+  val l2SubBankingFactor: Int = 2
+  val l2HintsSkipProbe: Boolean = false
+  val l2BankedControl: Boolean = false
+  val l2CtrlAddr: Option[Int] = Some(sifive.blocks.inclusivecache.InclusiveCacheParameters.L2ControlAddress)
+  val l2WriteBytes: Int = 16
+  val l2Banks: Int = 1
 
   // System topology
-  val useIncoherentBus: Boolean = true
-  val enableMemPort: Boolean = false
+  val useIncoherentBus: Boolean = CustomRocketParams.useIncoherentBus
+  val enableMemPort: Boolean = 
   val disableScratchpads: Boolean = true
 }
 
 private object CustomRocketConfigFragments {
   def build: Parameters = {
+    // Derived knobs to keep the config internally consistent.
+    val useTinyCore = CustomRocketParams.useTinyCore
+    val effectiveL1DCacheMSHRs =
+      if (useTinyCore) 0 else CustomRocketParams.l1DCacheMSHRs
+    val useIncoherentBus = CustomRocketParams.useIncoherentBus
+    val enableL2 =
+      if (useIncoherentBus) false else CustomRocketParams.enableL2
+    val enableMemPort =
+      if (useIncoherentBus) false else CustomRocketParams.enableMemPort
+    val effectiveL2Banks =
+      if (enableL2) math.max(1, CustomRocketParams.l2Banks) else 0
+
     val baseConfs: Seq[Config] = Seq(
       new chipyard.config.WithCacheBlockBytes(CustomRocketParams.cacheBlockBytes),
       new chipyard.config.WithRocketL1ICacheSets(CustomRocketParams.l1ICacheSets),
@@ -49,8 +71,8 @@ private object CustomRocketConfigFragments {
     ))
 
     val l1dNonblocking: Seq[Config] =
-      if (CustomRocketParams.l1DCacheMSHRs > 0 && !CustomRocketParams.useTinyCore)
-        Seq(new freechips.rocketchip.rocket.WithL1DCacheNonblocking(CustomRocketParams.l1DCacheMSHRs))
+      if (effectiveL1DCacheMSHRs > 0)
+        Seq(new freechips.rocketchip.rocket.WithL1DCacheNonblocking(effectiveL1DCacheMSHRs))
       else
         Seq.empty
 
@@ -64,15 +86,27 @@ private object CustomRocketConfigFragments {
       if (CustomRocketParams.enableTilePrefetchers) Seq(new chipyard.config.WithTilePrefetchers) else Seq.empty
 
     val l2: Seq[Config] =
-      if (CustomRocketParams.enableL2) Seq.empty
+      if (enableL2) Seq(
+        new freechips.rocketchip.subsystem.WithInclusiveCache(
+          nWays = CustomRocketParams.l2Ways,
+          capacityKB = CustomRocketParams.l2CapacityKB,
+          outerLatencyCycles = CustomRocketParams.l2OuterLatencyCycles,
+          subBankingFactor = CustomRocketParams.l2SubBankingFactor,
+          hintsSkipProbe = CustomRocketParams.l2HintsSkipProbe,
+          bankedControl = CustomRocketParams.l2BankedControl,
+          ctrlAddr = CustomRocketParams.l2CtrlAddr,
+          writeBytes = CustomRocketParams.l2WriteBytes
+        ),
+        new freechips.rocketchip.subsystem.WithNBanks(effectiveL2Banks)
+      )
       else Seq(new freechips.rocketchip.subsystem.WithNBanks(0))
 
     val memPort: Seq[Config] =
-      if (CustomRocketParams.enableMemPort) Seq.empty
+      if (enableMemPort) Seq.empty
       else Seq(new freechips.rocketchip.subsystem.WithNoMemPort)
 
     val bus: Seq[Config] =
-      if (CustomRocketParams.useIncoherentBus) Seq(new freechips.rocketchip.subsystem.WithIncoherentBusTopology)
+      if (useIncoherentBus) Seq(new freechips.rocketchip.subsystem.WithIncoherentBusTopology)
       else Seq.empty
 
     val scratchpads: Seq[Config] =
@@ -80,7 +114,7 @@ private object CustomRocketConfigFragments {
       else Seq.empty
 
     val core: Seq[Config] =
-      if (CustomRocketParams.useTinyCore)
+      if (useTinyCore)
         Seq(new freechips.rocketchip.rocket.With1TinyCore)
       else
         Seq(new freechips.rocketchip.rocket.WithNHugeCores(CustomRocketParams.numCores))
