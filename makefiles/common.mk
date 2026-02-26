@@ -20,13 +20,13 @@ ifeq ($(TARGET),boom)
 	OUT_SUFFIX = .boom
 else ifeq ($(TARGET),rocket)
 	CHIPYARD_CONFIG ?= TinyRocketConfig
-	CHIPYARD_TOP ?= Rocket
+	CHIPYARD_TOP ?= ChipTop
 	VLSI_CONF ?= sky130-rocket.yml
 	VLSI_OBJ_DIR = build-sky130-openroad-rocket
 	OUT_SUFFIX = .rocket
 else ifeq ($(TARGET),customrocket)
 	CHIPYARD_CONFIG ?= CustomRocketConfig
-	CHIPYARD_TOP ?= Rocket
+	CHIPYARD_TOP ?= ChipTop
 	VLSI_CONF ?= sky130-rocket.yml
 	VLSI_OBJ_DIR = build-sky130-openroad-customrocket
 	OUT_SUFFIX = .customrocket
@@ -53,27 +53,6 @@ CLEAN_FILES = $(LOG_FILES)
 CLEAN_FILES += $(LOG_PREFIX)violations$(OUT_SUFFIX).png $(LOG_PREFIX)violations$(OUT_SUFFIX).csv
 CLEAN_FILES += $(LOG_PREFIX)power$(OUT_SUFFIX).rpt $(LOG_PREFIX)syn_power$(OUT_SUFFIX).rpt $(LOG_PREFIX)power_saif$(OUT_SUFFIX).rpt
 CLEAN_FILES += custom_vlog$(OUT_SUFFIX).txt
-
-define run_on_docker
-cid=$$(docker ps -q --filter "name=^/$(DOCKER_CONTAINER)$$" | head -n 1); \
-if [ -z "$$cid" ]; then cid=$$(docker ps -q --filter ancestor=$(DOCKER_IMAGE) | head -n 1); fi; \
-if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 1; fi; \
-docker exec $$cid /bin/bash -lc "source /root/chipyard/env.sh && $(1)"
-endef
-
-define run_on_docker_raw
-cid=$$(docker ps -q --filter "name=^/$(DOCKER_CONTAINER)$$" | head -n 1); \
-if [ -z "$$cid" ]; then cid=$$(docker ps -q --filter ancestor=$(DOCKER_IMAGE) | head -n 1); fi; \
-if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 1; fi; \
-docker exec $$cid /bin/bash -lc "$(1)"
-endef
-
-define docker_cp_to
-cid=$$(docker ps -q --filter "name=^/$(DOCKER_CONTAINER)$$" | head -n 1); \
-if [ -z "$$cid" ]; then cid=$$(docker ps -q --filter ancestor=$(DOCKER_IMAGE) | head -n 1); fi; \
-if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 1; fi; \
-docker cp $(1) $$cid:$(2)
-endef
 
 
 
