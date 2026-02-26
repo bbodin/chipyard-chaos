@@ -29,13 +29,36 @@ SPACE_PATH_DEFAULT = Path(
 LOG_PATH_DEFAULT = Path("param_explore.csv")
 LOG_DIR_DEFAULT = Path("param_explore_logs")
 DEFAULT_TL_BEAT_BYTES = 8
-DEFAULT_OUTPUT_LOG = Path("syn.customrocket.log")
-CONSTRAINT_FILE_DEFAULT = "rocket_constraint.py"
+DEFAULT_OUTPUT_LOGS = {
+    "syn": Path("syn.customrocket.log"),
+    "verilog": Path("verilog.customrocket.log"),
+    "mm": Path("mm.customrocket.log"),
+    "power": Path("syn_power.customrocket.log"),
+}
+
+CONSTRAINT_FILE_DEFAULT = "rocket-configs/overlay/root/chipyard/generators/chipyard/src/main/scala/config/rocket_constraint.py"
+
 CMD_LIST_DEFAULT = [
-    "make docker-start",
-    "make docker-cmd CMD=\"rm -f /root/chipyard/.classpath_cache/chipyard.jar\"",
+    "make docker-stop",
+    "make docker-reset",
+    "make verilog TARGET=customrocket",
+    "make mm TARGET=customrocket",
     "make syn TARGET=customrocket",
+    "make syn_power TARGET=customrocket",
 ]
+
+
+def parse_output_logs(args) -> Dict[str, Path]:
+    if not args.output_log:
+        return DEFAULT_OUTPUT_LOGS
+    out_logs: Dict[str, Path] = {}
+    for entry in args.output_log:
+        if "=" not in entry:
+            print(f"Invalid --output-log entry: {entry}. Must be file_id=path", file=sys.stderr)
+            sys.exit(2)
+        file_id, path_str = entry.split("=", 1)
+        out_logs[file_id.strip()] = Path(path_str.strip())
+    return out_logs
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Explore template-driven parameters (random)")
@@ -49,7 +72,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--no-restore", action="store_true", help="Keep last applied config instead of restoring")
     ap.add_argument("--log", default=str(LOG_PATH_DEFAULT), help="CSV log path")
     ap.add_argument("--log-dir", default=str(LOG_DIR_DEFAULT), help="Directory to store per-case logs")
-    ap.add_argument("--output-log", default=str(DEFAULT_OUTPUT_LOG), help="Path to output log file")
+    ap.add_argument("--output-log", action="append", default=None, help="Specify output log(s) as file_id=path. Can be repeated. Example: --output-log syn=syn.customrocket.log --output-log verilog=verilog.customrocket.log",
+    )
     ap.add_argument(
         "--constraint-file",
         default=CONSTRAINT_FILE_DEFAULT,
@@ -72,6 +96,7 @@ def parse_value(raw: Any) -> Any:
     if v.isdigit():
         return int(v)
     return v
+
 
 
 def format_value(v: Any) -> str:
@@ -117,19 +142,13 @@ def render_template(template_text: str, params: Dict[str, Any], param_order: Ite
     return rendered
 
 
-def _is_pow2(n: int) -> bool:
-    return n > 0 and (n & (n - 1)) == 0
-
-
-def _log2_ceil(n: int) -> int:
-    if n <= 1:
-        return 0
-    return (n - 1).bit_length()
-
 
 def validate_params(params: Dict[str, Any], constraint_path: Optional[Path]) -> List[str]:
-    if constraint_path is None or not constraint_path.exists():
+    if constraint_path is None :
         return []
+    if not constraint_path.exists():
+        raise ValueError(f"constraint_path {constraint_path} does not exist")
+
     import importlib.util
 
     spec = importlib.util.spec_from_file_location("rocket_constraint", constraint_path)
@@ -252,11 +271,17 @@ def run_cmds(cmds: Iterable[str]) -> Tuple[int, List[str]]:
     failures: List[str] = []
     for cmd in cmds:
         print(f"[run] {cmd}")
-        proc = subprocess.run(cmd, shell=True)
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if proc.returncode != 0:
             failures.append(cmd)
             return proc.returncode, failures
     return 0, failures
+
+def compute_space_size(param_space) :
+    size : int = 1
+    for p,v in param_space.items() :
+        size *= len(v)
+    return size
 
 
 def run_cases(
@@ -268,7 +293,7 @@ def run_cases(
     config_path: Path,
     log_path: Path,
     log_dir: Path,
-    output_log: Path,
+    output_logs: Dict[str, Path],
     run_cmds_list: List[str],
     stop_on_fail: bool,
     no_restore: bool,
@@ -288,9 +313,16 @@ def run_cases(
             rendered = render_template(template_text, params, param_order)
             config_path.write_text(rendered)
 
-            if output_log.exists():
-                output_log.unlink()
+            # Track all output logs per case
+            case_output_paths: Dict[str, Path] = {}
 
+            # Remove existing outputs
+            for file_id, out_path in output_logs.items():
+                if out_path.exists():
+                    out_path.unlink()
+
+            # Run commands
+            # TODO for parallel : DOCKER_OVERLAYS=rocket-configs/overlay DOCKER_CONTAINER=...
             code, failed = run_cmds(run_cmds_list)
             if code != 0:
                 append_csv(log_path, case_id, "fail", code, failed[-1], params, param_order)
@@ -301,16 +333,20 @@ def run_cases(
             else:
                 append_csv(log_path, case_id, "ok", 0, "", params, param_order)
 
-            if output_log.exists():
-                log_dst = log_dir / f"{case_id}.log"
-                shutil.copyfile(output_log, log_dst)
-            else:
-                log_dst = log_dir / f"{case_id}.log"
-                with log_dst.open("w", encoding="utf-8") as f:
-                    f.write(f"{output_log} was not generated for this case\n")
-                    f.write(f"status={'fail' if code != 0 else 'ok'}\n")
-                    f.write(f"failed_cmd={failed[-1] if failed else ''}\n")
-                    f.write(f"params={case_text}\n")
+            # Copy multiple output logs
+            for file_id, out_path in output_logs.items():
+                case_log_path = log_dir / f"{case_id}_{file_id}.log"
+                if out_path.exists():
+                    shutil.copyfile(out_path, case_log_path)
+                else:
+                    with case_log_path.open("w", encoding="utf-8") as f:
+                        f.write(f"{out_path} was not generated for this case\n")
+                        f.write(f"status={'fail' if code != 0 else 'ok'}\n")
+                        f.write(f"failed_cmd={failed[-1] if failed else ''}\n")
+                        f.write(f"params={case_text}\n")
+                case_output_paths[file_id] = case_log_path
+
+            # Optional: store case_output_paths somewhere if needed
 
             if not no_restore:
                 config_path.write_text(render_template(template_text, baseline, param_order))
@@ -330,7 +366,8 @@ def main() -> int:
     template_path = Path(args.template)
     log_path = Path(args.log)
     log_dir = Path(args.log_dir)
-    output_log = Path(args.output_log)
+    output_logs = parse_output_logs(args)
+
 
     if not config_path.exists():
         print(f"Config not found: {config_path}", file=sys.stderr)
@@ -341,6 +378,9 @@ def main() -> int:
 
     space_path = args.space
     param_space, param_order = load_space(Path(space_path))
+
+    space_size = compute_space_size(param_space)
+    print (f"Space size is {space_size}")
 
     original = config_path.read_text()
     template_text = template_path.read_text()
@@ -360,7 +400,7 @@ def main() -> int:
     ranges = dict(param_space)
     run_cmds_list: List[str] = args.run_cmd or list(CMD_LIST_DEFAULT)
 
-    constraint_path = Path(args.constraint_file)
+    constraint_path = Path(args.constraint_file) if args.constraint_file else None
 
     cases, skipped = generate_random_cases(
         baseline,
@@ -386,7 +426,7 @@ def main() -> int:
         config_path,
         log_path,
         log_dir,
-        output_log,
+        output_logs,
         run_cmds_list,
         args.stop_on_fail,
         args.no_restore,
