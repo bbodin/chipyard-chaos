@@ -22,12 +22,18 @@ set stdlef "/root/.conda-sky130/share/pdk/sky130A/libs.ref/sky130_fd_sc_hd/lef/s
 if {[file exists $stdlef]} {
   read_lef $stdlef
 }
+foreach lef [glob -nocomplain /root/sram22_sky130_macros/*/*.lef] {
+  read_lef $lef
+}
 
 # Read liberty libraries for leakage power.
 foreach lib [glob -nocomplain /root/.conda-sky130/share/pdk/sky130A/libs.ref/sky130_fd_sc_hd/lib/*.lib] {
   read_liberty $lib
 }
 foreach lib [glob -nocomplain /root/.conda-sky130/share/pdk/sky130A/libs.ref/sky130_fd_io/lib/*.lib] {
+  read_liberty $lib
+}
+foreach lib [glob -nocomplain /root/sram22_sky130_macros/*/*.lib] {
   read_liberty $lib
 }
 
