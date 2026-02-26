@@ -95,4 +95,4 @@ RUN test -f /root/sram22_sky130_macros/sram22_64x24m4w24/sram22_64x24m4w24.lef
 # ---- Initialize VLSI ----
 RUN cd /root/chipyard && source env.sh && ./scripts/init-vlsi.sh sky130 openroad
 
-ENTRYPOINT ["/bin/bash", "-lc", "sleep infinity"]
+# ENTRYPOINT ["/bin/bash", "-lc", "sleep infinity"]
