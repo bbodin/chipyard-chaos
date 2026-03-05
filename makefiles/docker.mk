@@ -1,4 +1,4 @@
-.PHONY: docker-start docker-stop docker-reset docker-cmd docker-kill docker-build docker-status clean
+.PHONY: docker-start docker-stop docker-reset docker-cmd docker-kill docker-build docker-status docker-root clean
 
 
 define run_on_docker
@@ -28,6 +28,9 @@ if [ -z "$$cid" ]; then cid=$$(docker ps -q --filter ancestor=$(DOCKER_IMAGE) | 
 if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 1; fi; \
 docker cp $$cid:$(1) $(2)
 endef
+
+DOCKER_ROOT_SRC ?= /root
+DOCKER_ROOT_DST ?= docker-root
 
 
 
@@ -144,3 +147,11 @@ docker-status:
 
 
 	@printf "\n==============================\n\n"
+
+docker-root:
+	@cid=$$(docker ps -q --filter "name=^/$(DOCKER_CONTAINER)$$" | head -n 1); \
+	if [ -z "$$cid" ]; then cid=$$(docker ps -q --filter ancestor=$(DOCKER_IMAGE) | head -n 1); fi; \
+	if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 1; fi; \
+	mkdir -p "$(DOCKER_ROOT_DST)"; \
+	echo "Copying $$cid:$(DOCKER_ROOT_SRC) -> $(DOCKER_ROOT_DST)"; \
+	docker cp "$$cid:$(DOCKER_ROOT_SRC)/." "$(DOCKER_ROOT_DST)"
