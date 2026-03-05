@@ -5,7 +5,7 @@ import org.chipsalliance.cde.config.{Config, Parameters}
 // Edit these to customize Rocket cache geometry, line size, and core composition.
 object CustomRocketParams {
   // Core composition
-  val useTinyCore: Boolean = CustomRocketParams.useTinyCore
+  val useTinyCore: Boolean = false
   val numCores: Int = 1               // used when useTinyCore = false
   val useRV32: Boolean = false
 
@@ -13,38 +13,38 @@ object CustomRocketParams {
   val cacheBlockBytes: Int = 32
 
   // L1 cache geometry
-  val l1ICacheSets: Int = 32
+  val l1ICacheSets: Int = 64
   val l1ICacheWays: Int = 2
-  val l1DCacheSets: Int = 32
-  val l1DCacheWays: Int = 1
+  val l1DCacheSets: Int = 64
+  val l1DCacheWays: Int = 2
 
   // L1 D$ nonblocking (set to 0 to disable). Tiny cores use a scratchpad-style cache,
   // so keep this disabled unless useTinyCore = false.
   val l1DCacheMSHRs: Int = 0
 
   // Core micro-architecture knobs
-  val l2TLBEntries: Int = 4
-  val nPerfCounters: Int = 2
+  val l2TLBEntries: Int = 0
+  val nPerfCounters: Int = 0
   val nPMPs: Int = 0
-  val enableTilePrefetchers: Boolean = true
+  val enableTilePrefetchers: Boolean = false
 
   // L2 configuration
-  val enableL2: Boolean = 
+  val enableL2: Boolean = true
   // L2 cache tuning (inclusive LLC)
   val l2CapacityKB: Int = 512
-  val l2Ways: Int = 8
-  val l2OuterLatencyCycles: Int = 20
+  val l2Ways: Int = 4
+  val l2OuterLatencyCycles: Int = 40
   val l2SubBankingFactor: Int = 2
   val l2HintsSkipProbe: Boolean = false
   val l2BankedControl: Boolean = false
-  val l2CtrlAddr: Option[Int] = Some(sifive.blocks.inclusivecache.InclusiveCacheParameters.L2ControlAddress)
-  val l2WriteBytes: Int = 16
-  val l2Banks: Int = 1
+  val l2CtrlAddr: Option[Int] = None
+  val l2WriteBytes: Int = 8
+  val l2Banks: Int = 2
 
   // System topology
-  val useIncoherentBus: Boolean = CustomRocketParams.useIncoherentBus
-  val enableMemPort: Boolean = 
-  val disableScratchpads: Boolean = true
+  val useIncoherentBus: Boolean = false
+  val enableMemPort: Boolean = true
+  val disableScratchpads: Boolean = false
 }
 
 private object CustomRocketConfigFragments {

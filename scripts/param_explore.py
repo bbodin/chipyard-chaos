@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Explore parameter values for a template-driven config (random mode only) and run build commands.
+Explore parameter values for a template-driven config and run build commands.
 
-This script renders a config from a template file and restores
-baseline values after each case unless --no-restore is set.
+This script renders a config from a template file for each case, either random
+or a single fixed case via --case-json.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import csv
 import hashlib
 import json
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -28,12 +29,11 @@ SPACE_PATH_DEFAULT = Path(
 )
 LOG_PATH_DEFAULT = Path("param_explore.csv")
 LOG_DIR_DEFAULT = Path("param_explore_logs")
-DEFAULT_TL_BEAT_BYTES = 8
 DEFAULT_OUTPUT_LOGS = {
-    "syn": Path("syn.customrocket.log"),
+    #"syn": Path("syn.customrocket.log"),
     "verilog": Path("verilog.customrocket.log"),
     "mm": Path("mm.customrocket.log"),
-    "power": Path("syn_power.customrocket.log"),
+    #"power": Path("syn_power.customrocket.log"),
 }
 
 CONSTRAINT_FILE_DEFAULT = "rocket-configs/overlay/root/chipyard/generators/chipyard/src/main/scala/config/rocket_constraint.py"
@@ -41,10 +41,10 @@ CONSTRAINT_FILE_DEFAULT = "rocket-configs/overlay/root/chipyard/generators/chipy
 CMD_LIST_DEFAULT = [
     "make docker-stop",
     "make docker-reset",
-    "make verilog TARGET=customrocket",
+    #"make verilog TARGET=customrocket",
     "make mm TARGET=customrocket",
     "make syn TARGET=customrocket",
-    "make syn_power TARGET=customrocket",
+    #"make syn_power TARGET=customrocket",
 ]
 
 
@@ -62,14 +62,14 @@ def parse_output_logs(args) -> Dict[str, Path]:
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Explore template-driven parameters (random)")
-    ap.add_argument("--config", default=str(CONFIG_PATH_DEFAULT), help="Path to config file")
+    ap.add_argument("--config", default=str(CONFIG_PATH_DEFAULT), help="Path to config output file")
     ap.add_argument("--template", default=str(TEMPLATE_PATH_DEFAULT), help="Path to template file")
     ap.add_argument("--space", default=str(SPACE_PATH_DEFAULT), help="Path to JSON parameter space definition")
-    ap.add_argument("--random-cases", type=int, default=100, help="Number of random cases to try")
-    ap.add_argument("--list", action="store_true", help="List current parameter values and exit")
+    ap.add_argument("--case-json", default=None, help="Path to JSON file with a single fixed parameter set")
+    ap.add_argument("--random-cases", type=int, default=100, help="Number of random cases to try (ignored with --case-json)")
+    ap.add_argument("--list", action="store_true", help="List template parameters and ranges, then exit")
     ap.add_argument("--run-cmd", action="append", default=[], help="Run custom command per case (repeatable)")
     ap.add_argument("--stop-on-fail", action="store_true", help="Stop after a failing case")
-    ap.add_argument("--no-restore", action="store_true", help="Keep last applied config instead of restoring")
     ap.add_argument("--log", default=str(LOG_PATH_DEFAULT), help="CSV log path")
     ap.add_argument("--log-dir", default=str(LOG_DIR_DEFAULT), help="Directory to store per-case logs")
     ap.add_argument("--output-log", action="append", default=None, help="Specify output log(s) as file_id=path. Can be repeated. Example: --output-log syn=syn.customrocket.log --output-log verilog=verilog.customrocket.log",
@@ -109,25 +109,6 @@ def format_value(v: Any) -> str:
     return str(v)
 
 
-def read_params_from_config(text: str, param_names: Iterable[str]) -> Dict[str, str]:
-    params: Dict[str, str] = {}
-    param_set = set(param_names)
-    for line in text.splitlines():
-        s = line.strip()
-        if not s.startswith("val "):
-            continue
-        if "=" not in s:
-            continue
-        left, right = s.split("=", 1)
-        left = left[len("val ") :].strip()
-        name = left.split(":", 1)[0].strip()
-        if name not in param_set:
-            continue
-        value = right.split("//", 1)[0].strip()
-        params[name] = value
-    return params
-
-
 def render_template(template_text: str, params: Dict[str, Any], param_order: Iterable[str]) -> str:
     rendered = template_text
     for name in param_order:
@@ -144,7 +125,7 @@ def render_template(template_text: str, params: Dict[str, Any], param_order: Ite
 
 
 def validate_params(params: Dict[str, Any], constraint_path: Optional[Path]) -> List[str]:
-    if constraint_path is None :
+    if constraint_path is None:
         return []
     if not constraint_path.exists():
         raise ValueError(f"constraint_path {constraint_path} does not exist")
@@ -163,6 +144,15 @@ def validate_params(params: Dict[str, Any], constraint_path: Optional[Path]) -> 
         return list(func(params))
     except Exception as exc:  # pragma: no cover - defensive
         return [f"constraint_error: {exc}"]
+
+
+PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+def extract_placeholders(text: str) -> List[str]:
+    names = PLACEHOLDER_RE.findall(text)
+    # Preserve first-seen order while de-duplicating.
+    return list(dict.fromkeys(names))
 
 
 def load_space(path: Path) -> Tuple[Dict[str, List[Any]], List[str]]:
@@ -232,7 +222,6 @@ def append_csv(
 
 
 def generate_random_cases(
-    baseline: Dict[str, Any],
     ranges: Dict[str, List[Any]],
     param_order: List[str],
     constraint_path: Optional[Path],
@@ -247,7 +236,7 @@ def generate_random_cases(
 
     while len(cases) < count and attempts < max_attempts:
         attempts += 1
-        params = dict(baseline)
+        params: Dict[str, Any] = {}
         for k in keys:
             params[k] = random.choice(ranges[k])
         reasons = validate_params(params, constraint_path)
@@ -288,7 +277,6 @@ def run_cases(
     cases: List[Tuple[str, Dict[str, Any], str]],
     skipped: List[Tuple[str, List[str], Dict[str, Any]]],
     template_text: str,
-    baseline: Dict[str, Any],
     param_order: List[str],
     config_path: Path,
     log_path: Path,
@@ -296,7 +284,6 @@ def run_cases(
     output_logs: Dict[str, Path],
     run_cmds_list: List[str],
     stop_on_fail: bool,
-    no_restore: bool,
     log_skips: bool,
 ) -> int:
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -326,8 +313,6 @@ def run_cases(
             code, failed = run_cmds(run_cmds_list)
             if code != 0:
                 append_csv(log_path, case_id, "fail", code, failed[-1], params, param_order)
-                if not no_restore:
-                    config_path.write_text(render_template(template_text, baseline, param_order))
                 if stop_on_fail:
                     return code
             else:
@@ -345,15 +330,8 @@ def run_cases(
                         f.write(f"failed_cmd={failed[-1] if failed else ''}\n")
                         f.write(f"params={case_text}\n")
                 case_output_paths[file_id] = case_log_path
-
-            # Optional: store case_output_paths somewhere if needed
-
-            if not no_restore:
-                config_path.write_text(render_template(template_text, baseline, param_order))
-
     finally:
-        if not no_restore:
-            config_path.write_text(render_template(template_text, baseline, param_order))
+        pass
 
     print("\n[done]")
     return 0
@@ -369,9 +347,6 @@ def main() -> int:
     output_logs = parse_output_logs(args)
 
 
-    if not config_path.exists():
-        print(f"Config not found: {config_path}", file=sys.stderr)
-        return 2
     if not template_path.exists():
         print(f"Template not found: {template_path}", file=sys.stderr)
         return 2
@@ -382,19 +357,27 @@ def main() -> int:
     space_size = compute_space_size(param_space)
     print (f"Space size is {space_size}")
 
-    original = config_path.read_text()
     template_text = template_path.read_text()
-    baseline = read_params_from_config(original, param_order)
-
-    missing = [name for name in param_order if name not in baseline]
+    placeholders = extract_placeholders(template_text)
+    missing = [name for name in placeholders if name not in param_space]
     if missing:
-        print("Missing params in config: " + ", ".join(missing), file=sys.stderr)
+        print("Missing params in space for template placeholders: " + ", ".join(missing), file=sys.stderr)
         return 2
+    missing_order = [name for name in placeholders if name not in param_order]
+    if missing_order:
+        print("Template placeholders missing from space order: " + ", ".join(missing_order), file=sys.stderr)
+        return 2
+    unused = [name for name in param_space if name not in placeholders]
+    if unused:
+        print("warning: params in space not used by template: " + ", ".join(unused), file=sys.stderr)
 
     if args.list:
-        for name in param_order:
-            if name in baseline:
-                print(f"{name} = {baseline[name]}")
+        for name in placeholders:
+            values = param_space.get(name)
+            if values is None:
+                continue
+            formatted = ", ".join(format_value(v) for v in values)
+            print(f"{name}: [{formatted}]")
         return 0
 
     ranges = dict(param_space)
@@ -402,13 +385,37 @@ def main() -> int:
 
     constraint_path = Path(args.constraint_file) if args.constraint_file else None
 
-    cases, skipped = generate_random_cases(
-        baseline,
-        ranges,
-        param_order,
-        constraint_path,
-        args.random_cases,
-    )
+    if args.case_json:
+        case_path = Path(args.case_json)
+        if not case_path.exists():
+            print(f"Case JSON not found: {case_path}", file=sys.stderr)
+            return 2
+        case_data = json.loads(case_path.read_text())
+        if not isinstance(case_data, dict):
+            print("Case JSON must be an object of param -> value", file=sys.stderr)
+            return 2
+        params = {k: parse_value(v) for k, v in case_data.items()}
+        missing_case = [name for name in placeholders if name not in params]
+        if missing_case:
+            print("Missing params in case JSON: " + ", ".join(missing_case), file=sys.stderr)
+            return 2
+        extra_case = [name for name in params if name not in placeholders]
+        if extra_case:
+            print("warning: params in case JSON not used by template: " + ", ".join(extra_case), file=sys.stderr)
+
+        # Explicit fixed case: skip constraints to allow manual override.
+
+        case_text = ",".join(f"{k}={format_value(params.get(k, ''))}" for k in param_order)
+        case_id = hashlib.sha256(case_text.encode("utf-8")).hexdigest()
+        cases = [(case_id, params, case_text)]
+        skipped = []
+    else:
+        cases, skipped = generate_random_cases(
+            ranges,
+            param_order,
+            constraint_path,
+            args.random_cases,
+        )
 
     header = ["case", "status", "return_code", "failed_cmd"] + param_order
     try:
@@ -421,7 +428,6 @@ def main() -> int:
         cases,
         skipped,
         template_text,
-        baseline,
         param_order,
         config_path,
         log_path,
@@ -429,7 +435,6 @@ def main() -> int:
         output_logs,
         run_cmds_list,
         args.stop_on_fail,
-        args.no_restore,
         args.log_skips,
     )
 

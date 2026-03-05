@@ -1,12 +1,11 @@
 # Chipyard VLSI Workspace
 
-
 This repo builds a single Docker image and runs Rocket or BOOM flows inside it.
 
 
 ## Docker
 
-Build image
+Build image (ensure you have a working docker system)
 ```bash
 make docker-build
 ```
@@ -16,10 +15,9 @@ Start container
 make docker-start
 ```
 
-Run a command inside the container
+Run a command inside the container within the chipyard conda environment
 ```bash
 make docker-cmd CMD="ls"
-make docker-cmd CMD="ls /" RAW=1
 ```
 
 ## Config Overlays
@@ -33,6 +31,24 @@ rocket-configs/overlay/root/chipyard/vlsi/sky130-rocket.yml
 boom-configs/overlay/root/chipyard/vlsi/sky130-boom.yml
 ```
 
+
+
+## RTL
+
+It is possible to generate the verilog files for a particular chip target (rocket or boom) :
+
+For example:
+```bash
+make verilog TARGET=rocket
+```
+
+The verilog files are generated inside the docker under `/root/build/rocket/verilog`
+
+Use CUSTOM_VLOG in vlsi flow
+```bash
+CUSTOM_VLOG="$(cat custom_vlog.rocket.txt)" make syn
+CUSTOM_VLOG="$(cat custom_vlog.boom.txt)" make TARGET=boom syn
+```
 
 ## Targets
 
@@ -52,21 +68,6 @@ make TARGET=boom power
 make TARGET=boom syn_power
 ```
 
-
-
-## RTL
-
-Generate verilog once and reuse
-```bash
-make verilog
-make custom_vlog
-```
-
-Use CUSTOM_VLOG in vlsi flow
-```bash
-CUSTOM_VLOG="$(cat custom_vlog.rocket.txt)" make syn
-CUSTOM_VLOG="$(cat custom_vlog.boom.txt)" make TARGET=boom syn
-```
 
 ## Outputs
 
