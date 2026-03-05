@@ -22,6 +22,13 @@ if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 
 docker cp $(1) $$cid:$(2)
 endef
 
+define docker_cp_from
+cid=$$(docker ps -q --filter "name=^/$(DOCKER_CONTAINER)$$" | head -n 1); \
+if [ -z "$$cid" ]; then cid=$$(docker ps -q --filter ancestor=$(DOCKER_IMAGE) | head -n 1); fi; \
+if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 1; fi; \
+docker cp $$cid:$(1) $(2)
+endef
+
 
 
 docker-build: build$(OUT_SUFFIX).log
