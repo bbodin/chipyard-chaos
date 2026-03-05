@@ -1,6 +1,5 @@
 ### Attempt to follow the tutorial : https://chipyard.readthedocs.io/en/stable/VLSI/Sky130-OpenROAD-Tutorial.html
 
-
 # ====================================================
 # Stage 1 — Full Build Environment (up to build-setup)
 # ====================================================
@@ -41,8 +40,7 @@ RUN conda config --set channel_priority true && \
 
 
 
-# ---- Install PDK + Tools (single layer for cache efficiency) ----
-
+# ---- Install PDK + Tools ----
 RUN conda create -y -c litex-hub --prefix /root/.conda-sky130 open_pdks.sky130a=1.0.457_0_g32e8f23 && \
     conda create -y -c litex-hub --prefix /root/.conda-yosys yosys=0.27_4_gb58664d44 && \
     conda create -y -c litex-hub --prefix /root/.conda-openroad openroad=2.0_7070_g0264023b6 && \
@@ -50,12 +48,8 @@ RUN conda create -y -c litex-hub --prefix /root/.conda-sky130 open_pdks.sky130a=
     conda create -y -c litex-hub --prefix /root/.conda-signoff magic=8.3.376_0_g5e5879c netgen=1.5.250_0_g178b172 && \
     conda clean -afy
 
-
-
 RUN conda config --set channel_priority strict && \
     conda config --remove channels defaults
-
-
 
 # ============================
 # Stage 2 —  Build-Chipyard
@@ -70,7 +64,6 @@ RUN git clone https://github.com/ucb-bar/chipyard.git /root/chipyard && cd /root
 
 ## ---- Build setup ----
 RUN cd /root/chipyard && ./scripts/build-setup.sh -v -s 6 -s 7 -s 8 -s 9 riscv-tools
-
 
 
 # ====================
@@ -94,5 +87,51 @@ RUN test -f /root/sram22_sky130_macros/sram22_64x24m4w24/sram22_64x24m4w24.lef
 
 # ---- Initialize VLSI ----
 RUN cd /root/chipyard && source env.sh && ./scripts/init-vlsi.sh sky130 openroad
+
+RUN sed -i \
+   -e 's|/path/to/sky130A|/root/.conda-sky130/share/pdk/sky130A|g' \
+   -e 's|/path/to/sram22_sky130_macros|/root/sram22_sky130_macros|g' \
+   /root/chipyard/vlsi/example-sky130.yml
+
+
+
+RUN cat <<'EOF' >> /root/chipyard/vlsi/example-openroad.yml
+synthesis.yosys.yosys_bin: /root/.conda-yosys/bin/yosys
+par.openroad.openroad_bin: /root/.conda-openroad/bin/openroad
+par.openroad.klayout_bin: /root/.conda-klayout/bin/klayout  # binary that OpenROAD calls for final GDS writeout
+drc.klayout.klayout_bin: /root/.conda-klayout/bin/klayout   # binary that runs for DRC step
+drc.magic.magic_bin: /root/.conda-signoff/bin/magic
+lvs.netgen.netgen_bin: /root/.conda-signoff/bin/netgen
+EOF
+
+# --- I don't trust myself, I check the bin exist ----
+RUN set -e; \
+  for bin in \
+    ~/.conda-yosys/bin/yosys \
+    ~/.conda-openroad/bin/openroad \
+    ~/.conda-klayout/bin/klayout \
+    ~/.conda-signoff/bin/magic \
+    ~/.conda-signoff/bin/netgen \
+  ; do \
+    if [ ! -x "$bin" ]; then \
+      echo "ERROR: $bin not found or not executable"; \
+      exit 1; \
+    fi; \
+  done; \
+  echo "All required executables are present."
+
+
+
+# ----  Prepare buildfiles ----
+#RUN cd /root/chipyard && source env.sh && cd /root/chipyard/vlsi && make buildfile tutorial=sky130-openroad
+
+# ---- Run Synthesis ----
+#RUN cd /root/chipyard && source env.sh && cd /root/chipyard/vlsi && make syn tutorial=sky130-openroad
+
+# ---- Run P&R ----
+#RUN cd /root/chipyard && source env.sh && cd /root/chipyard/vlsi && make par tutorial=sky130-openroad
+
+
+
 
 # ENTRYPOINT ["/bin/bash", "-lc", "sleep infinity"]
