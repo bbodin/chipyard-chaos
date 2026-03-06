@@ -1,0 +1,8 @@
+{
+  "numCores": 8,
+  "numBanks":  8,
+  "numMemoryChannels":  2,
+  "systemBusWidth":  256,
+  "numL2TLBs":  8,
+  "inclusiveCache":  true
+}

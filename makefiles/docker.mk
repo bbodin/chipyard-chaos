@@ -1,5 +1,9 @@
 .PHONY: docker-start docker-stop docker-reset docker-cmd docker-kill docker-build docker-status docker-root clean
 
+DOCKER_ROOT_SRC ?= /root
+DOCKER_ROOT_DST ?= docker-root
+DOCKER_OVERLAYS ?= overlay
+DOCKER_DEPS = $(shell find $(DOCKER_OVERLAYS) -type f 2>/dev/null)
 
 define run_on_docker
 cid=$$(docker ps -q --filter "name=^/$(DOCKER_CONTAINER)$$" | head -n 1); \
@@ -29,8 +33,6 @@ if [ -z "$$cid" ]; then echo "No running $(DOCKER_IMAGE) container found"; exit 
 docker cp $$cid:$(1) $(2)
 endef
 
-DOCKER_ROOT_SRC ?= /root
-DOCKER_ROOT_DST ?= docker-root
 
 
 

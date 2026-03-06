@@ -6,3 +6,4 @@ include makefiles/simu.mk
 include makefiles/syn.mk
 include makefiles/pr.mk
 include makefiles/power.mk
+include makefiles/demo.mk

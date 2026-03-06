@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+# In BaseSubsystemConfig, all TL buses default to beatBytes = 8 unless overridden.
 DEFAULT_TL_BEAT_BYTES = 8
 
 
@@ -13,6 +14,8 @@ def _log2_ceil(n: int) -> int:
     if n <= 1:
         return 0
     return (n - 1).bit_length()
+
+
 
 
 def validate_params(params: Dict[str, Any]) -> List[str]:
@@ -40,35 +43,36 @@ def validate_params(params: Dict[str, Any]) -> List[str]:
     if _get_int("numCores") <= 0:
         errors.append("numCores must be > 0")
 
+    block_bytes = _get_int("cacheBlockBytes")
+    if block_bytes is None or block_bytes <= 0:
+        errors.append("cacheBlockBytes must be > 0")
+
     if _get_int("l1ICacheSets") <= 0 or _get_int("l1ICacheWays") <= 0:
         errors.append("l1 I$ sets/ways must be > 0")
 
     if _get_int("l1DCacheSets") <= 0 or _get_int("l1DCacheWays") <= 0:
         errors.append("l1 D$ sets/ways must be > 0")
 
+    # Syn macro compiler (strict) limitations: smallest SRAM depth is 64.
+    # Tag arrays are sized by nSets, so require sets to be a multiple of 64.
+    l1i_sets = _get_int("l1ICacheSets")
+    if l1i_sets is not None and l1i_sets % 64 != 0:
+        errors.append("l1 I$ sets must be a multiple of 64 for syn strict SRAM macros")
+
+    l1d_sets = _get_int("l1DCacheSets")
+    if l1d_sets is not None and l1d_sets % 64 != 0:
+        errors.append("l1 D$ sets must be a multiple of 64 for syn strict SRAM macros")
+
     # Tiny core constraints (Tiny core uses scratchpad D$)
     if _get_bool("useTinyCore") and _get_int("l1DCacheMSHRs") != 0:
         errors.append("useTinyCore requires l1DCacheMSHRs=0")
 
-    if _get_bool("useTinyCore") and _get_bool("enableMemPort"):
-        errors.append("useTinyCore requires enableMemPort=false (overlaps TCM @ 0x8000_0000)")
-
-    # Require at least 1 MSHR in L1 D$ when L2 is enabled
-    if _get_bool("enableL2") and _get_int("l1DCacheMSHRs") <= 0:
-        errors.append("enableL2=true requires l1DCacheMSHRs >= 1")
-
     # Incoherent topology has no MBUS or coherence manager
-    if _get_bool("useIncoherentBus") and not _get_bool("useTinyCore"):
-        errors.append("useIncoherentBus requires useTinyCore=true (no coherent managers)")
-
     if _get_bool("useIncoherentBus") and _get_bool("enableMemPort"):
         errors.append("useIncoherentBus requires enableMemPort=false (no MBUS)")
 
     if _get_bool("useIncoherentBus") and _get_bool("enableL2"):
         errors.append("useIncoherentBus requires enableL2=false (no coherent L2)")
-
-    if _get_bool("useIncoherentBus") and not _get_bool("disableScratchpads"):
-        errors.append("useIncoherentBus requires disableScratchpads=true (no MBUS)")
 
     # Coherent topology but no memory managers attached
     if (not _get_bool("useIncoherentBus") 
@@ -76,17 +80,8 @@ def validate_params(params: Dict[str, Any]) -> List[str]:
             and _get_bool("disableScratchpads")):
         errors.append("coherent bus requires enableMemPort or scratchpads")
 
-    # Coherent topology needs an L2 in this setup (no MBUS without it)
-    if not _get_bool("useIncoherentBus") and not _get_bool("enableL2"):
-        errors.append("coherent bus requires enableL2=true (MBUS absent without L2)")
-
-    # When L2 is disabled, MBUS is not present in this setup; scratchpads must be off
-    if not _get_bool("enableL2") and not _get_bool("disableScratchpads"):
-        errors.append("enableL2=false requires disableScratchpads=true (MBUS absent)")
-
     # Non-blocking D$ constraint: untagBits must fit within pgIdxBits (4KiB pages => 12 bits)
     if _get_int("l1DCacheMSHRs") > 0:
-        block_bytes = _get_int("cacheBlockBytes")
         l1d_sets = _get_int("l1DCacheSets")
         if _log2_ceil(block_bytes) + _log2_ceil(l1d_sets) > 12:
             errors.append("nonblocking L1D requires log2(blockBytes)+log2(nSets) <= 12")
@@ -96,7 +91,6 @@ def validate_params(params: Dict[str, Any]) -> List[str]:
         l2_ways = _get_int("l2Ways")
         l2_banks = _get_int("l2Banks")
         l2_cap_kb = _get_int("l2CapacityKB")
-        block_bytes = _get_int("cacheBlockBytes")
         write_bytes = _get_int("l2WriteBytes")
         port_factor = _get_int("l2SubBankingFactor")
         mem_cycles = _get_int("l2OuterLatencyCycles")
@@ -121,8 +115,6 @@ def validate_params(params: Dict[str, Any]) -> List[str]:
             errors.append("l2SubBankingFactor must be >= 2")
         if mem_cycles <= 0:
             errors.append("l2OuterLatencyCycles must be > 0")
-        if l2_banks > 1 and port_factor < 4:
-            errors.append("l2Banks>1 requires l2SubBankingFactor >= 4")
 
         if _get_bool("l2BankedControl"):
             beats_per_block = block_bytes // write_bytes if write_bytes else 0

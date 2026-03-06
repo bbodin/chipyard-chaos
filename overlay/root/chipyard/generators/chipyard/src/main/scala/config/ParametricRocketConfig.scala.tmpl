@@ -1,0 +1,98 @@
+package chipyard
+
+import org.chipsalliance.cde.config.Config
+
+object ParametricRocketConfigUtils {
+  val EmptyConfig: Config = new Config((_, _, _) => { case _ => None })
+
+  def isPowerOf2(x: Int): Boolean =
+    x > 0 && ((x & (x - 1)) == 0)
+}
+
+final case class RocketSoCParams(
+  numCores: Int = {{numCores}},
+  numBanks: Int = {{numBanks}},
+  numMemoryChannels: Int = {{numMemoryChannels}},
+  systemBusWidth: Int = {{systemBusWidth}},
+  numL2TLBs: Int = {{numL2TLBs}},
+  inclusiveCache: Boolean = {{inclusiveCache}}
+) {
+  import ParametricRocketConfigUtils.isPowerOf2
+
+  // Hard sanity checks
+  require(numCores > 0, s"numCores must be > 0, got $numCores")
+  require(numBanks > 0, s"numBanks must be > 0, got $numBanks")
+  require(numMemoryChannels > 0, s"numMemoryChannels must be > 0, got $numMemoryChannels")
+  require(systemBusWidth > 0, s"systemBusWidth must be > 0, got $systemBusWidth")
+  require(numL2TLBs >= 0, s"numL2TLBs must be >= 0, got $numL2TLBs")
+
+  // Common interconnect/cache granularity sanity
+  require(isPowerOf2(systemBusWidth),
+    s"systemBusWidth must be a power of 2, got $systemBusWidth")
+
+  // Chipyard docs explicitly call out powers-of-two restrictions for banks/channels
+  require(isPowerOf2(numBanks),
+    s"numBanks must be a power of 2, got $numBanks")
+  require(isPowerOf2(numMemoryChannels),
+    s"numMemoryChannels must be a power of 2, got $numMemoryChannels")
+
+  // Conservative practical bounds
+  require(systemBusWidth >= 32 && systemBusWidth <= 1024,
+    s"systemBusWidth must be in [32, 1024], got $systemBusWidth")
+  require(numCores <= 128,
+    s"numCores=$numCores is above the supported sanity bound (128)")
+  require(numBanks <= 64,
+    s"numBanks=$numBanks is above the supported sanity bound (64)")
+  require(numMemoryChannels <= 16,
+    s"numMemoryChannels=$numMemoryChannels is above the supported sanity bound (16)")
+  require(numL2TLBs <= 4096,
+    s"numL2TLBs=$numL2TLBs is above the supported sanity bound (4096)")
+
+  // Balance checks: not proof of tapeoutability, just obvious bad-config rejection
+  require(numMemoryChannels <= numBanks,
+    s"numMemoryChannels=$numMemoryChannels cannot exceed numBanks=$numBanks")
+
+  require(numBanks <= 4 * numCores,
+    s"numBanks=$numBanks is suspiciously high relative to numCores=$numCores")
+
+  require(systemBusWidth >= 32 * numMemoryChannels,
+    s"systemBusWidth=$systemBusWidth is too small for numMemoryChannels=$numMemoryChannels")
+
+  if (inclusiveCache) {
+    require(numBanks >= 1,
+      s"inclusiveCache=true requires at least one L2 bank, got $numBanks")
+  }
+
+  if (numCores >= 16) {
+    require(systemBusWidth >= 128,
+      s"numCores=$numCores requires systemBusWidth >= 128, got $systemBusWidth")
+    require(numBanks >= 4,
+      s"numCores=$numCores requires numBanks >= 4, got $numBanks")
+  }
+
+  if (numCores >= 32) {
+    require(numMemoryChannels >= 2,
+      s"numCores=$numCores requires numMemoryChannels >= 2, got $numMemoryChannels")
+    require(systemBusWidth >= 256,
+      s"numCores=$numCores requires systemBusWidth >= 256, got $systemBusWidth")
+  }
+}
+
+class ParametricRocketConfigBase(p: RocketSoCParams) extends Config(
+  new freechips.rocketchip.rocket.WithNHugeCores(p.numCores) ++
+  new freechips.rocketchip.subsystem.WithNBanks(p.numBanks) ++
+  new freechips.rocketchip.subsystem.WithNMemoryChannels(p.numMemoryChannels) ++
+  new chipyard.config.WithSystemBusWidth(p.systemBusWidth) ++
+  (if (p.numL2TLBs > 0)
+     new chipyard.config.WithL2TLBs(p.numL2TLBs)
+   else
+     ParametricRocketConfigUtils.EmptyConfig) ++
+  (if (p.inclusiveCache)
+     new freechips.rocketchip.subsystem.WithInclusiveCache
+   else
+     ParametricRocketConfigUtils.EmptyConfig) ++
+  new chipyard.config.AbstractConfig
+)
+
+// Default instantiation for legacy-configs (must be no-arg).
+class ParametricRocketConfig extends ParametricRocketConfigBase(RocketSoCParams())

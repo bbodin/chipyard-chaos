@@ -17,40 +17,84 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple, Optional
 
-CONFIG_PATH_DEFAULT = Path(
-    "rocket-configs/overlay/root/chipyard/generators/chipyard/src/main/scala/config/CustomRocketConfigs.scala"
+TARGET_DEFAULT = "customrocket"
+
+CUSTOM_CONFIG_PATH = Path(
+    "overlay/root/chipyard/generators/chipyard/src/main/scala/config/CustomRocketConfigs.scala"
 )
-TEMPLATE_PATH_DEFAULT = Path(str(CONFIG_PATH_DEFAULT) + ".tmpl")
-SPACE_PATH_DEFAULT = Path(
-    "rocket-configs/overlay/root/chipyard/generators/chipyard/src/main/scala/config/param_rocket.json"
+CUSTOM_TEMPLATE_PATH = Path(str(CUSTOM_CONFIG_PATH) + ".tmpl")
+CUSTOM_SPACE_PATH = Path(
+    "overlay/root/chipyard/generators/chipyard/src/main/scala/config/param_rocket.json"
 )
-LOG_PATH_DEFAULT = Path("param_explore.csv")
-LOG_DIR_DEFAULT = Path("param_explore_logs")
-DEFAULT_OUTPUT_LOGS = {
-    #"syn": Path("syn.customrocket.log"),
-    "verilog": Path("verilog.customrocket.log"),
-    "mm": Path("mm.customrocket.log"),
-    #"power": Path("syn_power.customrocket.log"),
-}
+CUSTOM_CONSTRAINT_PATH = Path(
+    "overlay/root/chipyard/generators/chipyard/src/main/scala/config/rocket_constraint.py"
+)
 
-CONSTRAINT_FILE_DEFAULT = "rocket-configs/overlay/root/chipyard/generators/chipyard/src/main/scala/config/rocket_constraint.py"
-
-CMD_LIST_DEFAULT = [
-    "make docker-stop",
-    "make docker-reset",
-    #"make verilog TARGET=customrocket",
-    "make mm TARGET=customrocket",
-    "make syn TARGET=customrocket",
-    #"make syn_power TARGET=customrocket",
-]
+PARAM_CONFIG_PATH = Path(
+    "overlay/root/chipyard/generators/chipyard/src/main/scala/config/ParametricRocketConfig.scala"
+)
+PARAM_TEMPLATE_PATH = Path(str(PARAM_CONFIG_PATH) + ".tmpl")
+PARAM_SPACE_PATH = Path(
+    "overlay/root/chipyard/generators/chipyard/src/main/scala/config/param_parametricrocket.json"
+)
 
 
-def parse_output_logs(args) -> Dict[str, Path]:
+def target_defaults(target: str) -> Dict[str, Any]:
+    if target == "parametricrocket":
+        return {
+            "config": PARAM_CONFIG_PATH,
+            "template": PARAM_TEMPLATE_PATH,
+            "space": PARAM_SPACE_PATH,
+            "constraint": None,
+            "log": Path(f"param_explore_{target}.csv"),
+            "log_dir": Path(f"param_explore_logs_{target}"),
+            "output_logs": {
+                "syn": Path(f"syn.{target}.log"),
+                "verilog": Path(f"verilog.{target}.log"),
+                "mm": Path(f"mm.{target}.log"),
+                "power": Path(f"syn_power.{target}.log"),
+            },
+            "cmds": [
+                "make docker-stop || true",
+                "make docker-reset",
+                f"make verilog TARGET={target}",
+                f"make mm TARGET={target}",
+                f"make syn TARGET={target}",
+                f"make syn_power TARGET={target}",
+            ],
+        }
+
+    return {
+        "config": CUSTOM_CONFIG_PATH,
+        "template": CUSTOM_TEMPLATE_PATH,
+        "space": CUSTOM_SPACE_PATH,
+        "constraint": CUSTOM_CONSTRAINT_PATH,
+        "log": Path(f"param_explore_{target}.csv"),
+        "log_dir": Path(f"param_explore_logs_{target}"),
+        "output_logs": {
+            "syn": Path(f"syn.{target}.log"),
+            "verilog": Path(f"verilog.{target}.log"),
+            "mm": Path(f"mm.{target}.log"),
+            "power": Path(f"syn_power.{target}.log"),
+        },
+        "cmds": [
+            "make docker-stop || true",
+            "make docker-reset",
+            f"make verilog TARGET={target}",
+            f"make mm TARGET={target}",
+            f"make syn TARGET={target}",
+            f"make syn_power TARGET={target}",
+        ],
+    }
+
+
+def parse_output_logs(args, defaults: Dict[str, Path]) -> Dict[str, Path]:
     if not args.output_log:
-        return DEFAULT_OUTPUT_LOGS
+        return defaults
     out_logs: Dict[str, Path] = {}
     for entry in args.output_log:
         if "=" not in entry:
@@ -62,25 +106,26 @@ def parse_output_logs(args) -> Dict[str, Path]:
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Explore template-driven parameters (random)")
-    ap.add_argument("--config", default=str(CONFIG_PATH_DEFAULT), help="Path to config output file")
-    ap.add_argument("--template", default=str(TEMPLATE_PATH_DEFAULT), help="Path to template file")
-    ap.add_argument("--space", default=str(SPACE_PATH_DEFAULT), help="Path to JSON parameter space definition")
+    ap.add_argument("--target", default=TARGET_DEFAULT, choices=["customrocket", "parametricrocket"], help="Select default config/template/space/commands")
+    ap.add_argument("--config", default=None, help="Path to config output file (defaults by --target)")
+    ap.add_argument("--template", default=None, help="Path to template file (defaults by --target)")
+    ap.add_argument("--space", default=None, help="Path to JSON parameter space definition (defaults by --target)")
     ap.add_argument("--case-json", default=None, help="Path to JSON file with a single fixed parameter set")
     ap.add_argument("--random-cases", type=int, default=100, help="Number of random cases to try (ignored with --case-json)")
     ap.add_argument("--list", action="store_true", help="List template parameters and ranges, then exit")
     ap.add_argument("--run-cmd", action="append", default=[], help="Run custom command per case (repeatable)")
     ap.add_argument("--stop-on-fail", action="store_true", help="Stop after a failing case")
-    ap.add_argument("--log", default=str(LOG_PATH_DEFAULT), help="CSV log path")
-    ap.add_argument("--log-dir", default=str(LOG_DIR_DEFAULT), help="Directory to store per-case logs")
+    ap.add_argument("--log", default=None, help="CSV log path (defaults by --target)")
+    ap.add_argument("--log-dir", default=None, help="Directory to store per-case logs (defaults by --target)")
     ap.add_argument("--output-log", action="append", default=None, help="Specify output log(s) as file_id=path. Can be repeated. Example: --output-log syn=syn.customrocket.log --output-log verilog=verilog.customrocket.log",
     )
     ap.add_argument(
         "--constraint-file",
-        default=CONSTRAINT_FILE_DEFAULT,
+        default=None,
         help="Path to constraint file (optional)",
     )
     ap.add_argument("--overwrite-log", action="store_true", help="Overwrite log file if header mismatches")
-    ap.add_argument("--log-skips", action="store_true", default=True, help="Record skipped cases in CSV")
+    ap.add_argument("--log-skips", action="store_true", default=False, help="Record skipped cases in CSV")
     ap.add_argument("--no-log-skips", action="store_false", dest="log_skips", help="Do not record skipped cases")
     return ap.parse_args()
 
@@ -212,8 +257,10 @@ def append_csv(
     failed_cmd: str,
     params: Dict[str, Any],
     param_order: List[str],
+    start_time: str,
+    end_time: str,
 ) -> None:
-    fields = [case_id, status, str(return_code), failed_cmd] + [
+    fields = [case_id, status, str(return_code), failed_cmd, start_time, end_time] + [
         format_value(params.get(k, "")) for k in param_order
     ]
     with path.open("a", encoding="utf-8", newline="") as f:
@@ -262,8 +309,10 @@ def run_cmds(cmds: Iterable[str]) -> Tuple[int, List[str]]:
         print(f"[run] {cmd}")
         proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if proc.returncode != 0:
+            print(f"   error with result code {proc.returncode}")
             failures.append(cmd)
             return proc.returncode, failures
+    print(f"   success ...")
     return 0, failures
 
 def compute_space_size(param_space) :
@@ -292,11 +341,12 @@ def run_cases(
         print(f"skipped {len(skipped)} cases due to constraints")
         if log_skips:
             for case_id, reasons, params in skipped:
-                append_csv(log_path, case_id, "skip", -1, ";".join(reasons), params, param_order)
+                append_csv(log_path, case_id, "skip", -1, ";".join(reasons), params, param_order, "", "")
 
     try:
         for case_id, params, case_text in cases:
             print(f"\n[case] {case_id}")
+            start_time = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
             rendered = render_template(template_text, params, param_order)
             config_path.write_text(rendered)
 
@@ -311,12 +361,13 @@ def run_cases(
             # Run commands
             # TODO for parallel : DOCKER_OVERLAYS=rocket-configs/overlay DOCKER_CONTAINER=...
             code, failed = run_cmds(run_cmds_list)
+            end_time = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
             if code != 0:
-                append_csv(log_path, case_id, "fail", code, failed[-1], params, param_order)
+                append_csv(log_path, case_id, "fail", code, failed[-1], params, param_order, start_time, end_time)
                 if stop_on_fail:
                     return code
             else:
-                append_csv(log_path, case_id, "ok", 0, "", params, param_order)
+                append_csv(log_path, case_id, "ok", 0, "", params, param_order, start_time, end_time)
 
             # Copy multiple output logs
             for file_id, out_path in output_logs.items():
@@ -339,19 +390,20 @@ def run_cases(
 
 def main() -> int:
     args = parse_args()
+    defaults = target_defaults(args.target)
 
-    config_path = Path(args.config)
-    template_path = Path(args.template)
-    log_path = Path(args.log)
-    log_dir = Path(args.log_dir)
-    output_logs = parse_output_logs(args)
+    config_path = Path(args.config) if args.config else Path(defaults["config"])
+    template_path = Path(args.template) if args.template else Path(defaults["template"])
+    space_path = args.space if args.space else str(defaults["space"])
+    log_path = Path(args.log) if args.log else Path(defaults["log"])
+    log_dir = Path(args.log_dir) if args.log_dir else Path(defaults["log_dir"])
+    output_logs = parse_output_logs(args, defaults["output_logs"])
 
 
     if not template_path.exists():
         print(f"Template not found: {template_path}", file=sys.stderr)
         return 2
 
-    space_path = args.space
     param_space, param_order = load_space(Path(space_path))
 
     space_size = compute_space_size(param_space)
@@ -381,9 +433,12 @@ def main() -> int:
         return 0
 
     ranges = dict(param_space)
-    run_cmds_list: List[str] = args.run_cmd or list(CMD_LIST_DEFAULT)
+    run_cmds_list: List[str] = args.run_cmd or list(defaults["cmds"])
 
-    constraint_path = Path(args.constraint_file) if args.constraint_file else None
+    if args.constraint_file:
+        constraint_path = Path(args.constraint_file)
+    else:
+        constraint_path = Path(defaults["constraint"]) if defaults.get("constraint") else None
 
     if args.case_json:
         case_path = Path(args.case_json)
@@ -417,7 +472,7 @@ def main() -> int:
             args.random_cases,
         )
 
-    header = ["case", "status", "return_code", "failed_cmd"] + param_order
+    header = ["case", "status", "return_code", "failed_cmd", "start_time", "end_time"] + param_order
     try:
         ensure_csv_header(log_path, header, args.overwrite_log)
     except ValueError as exc:

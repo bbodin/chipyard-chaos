@@ -6,6 +6,9 @@
 *.png
 *.csv
 *.txt
-/param_explore_logs/
+/param_explore_logs*/
 __pycache__
 /mount/
+/docker-root/
+/overlay/root/chipyard/generators/chipyard/src/main/scala/config/CustomRocketConfigs.scala
+/overlay/root/chipyard/generators/chipyard/src/main/scala/config/ParametricRocketConfig.scala
